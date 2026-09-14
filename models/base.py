@@ -1,9 +1,8 @@
 from abc import ABC,abstractmethod
 
 
-
-
 class BaseEstimator(ABC):
+
     
     @abstractmethod
     def fit(self,X,y):
@@ -21,4 +20,18 @@ class BaseEstimator(ABC):
     
     
     
-    
+class BaseFamily(ABC):
+
+
+    @abstractmethod
+    def link(self,X):
+        pass
+
+
+    @abstractmethod
+    def reverse_link(self,X):
+        pass
+
+    @abstractmethod
+    def variance(self,X):
+        pass
