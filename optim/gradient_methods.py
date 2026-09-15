@@ -1,4 +1,5 @@
 from .base import BaseSolver
+from ..data_utils.preprocessor import _add_intercept
 import numpy as np
 
 
@@ -37,11 +38,11 @@ class GradientDescent(BaseSolver):
                     self.weights=self._soft_threshold(self.weights,self.learning_rate* self.alpha*(self.l1_ratio if self.penalty=="EN" else 1 ))
                 self.bias-= self.learning_rate*bias_gradient
 
-        return [self.weights,self.bias]
+        return [self.bias,self.weights]
 
 class NormalEquations(BaseSolver):
     def optimize(self,model, X, y):
-        X_b=np.c_[np.ones(X.shape[0]),X] 
+        X_b=_add_intercept(X)
         weights=np.linalg.inv(X_b.T@X_b) @ X_b.T @ y
         return [weights[0],weights[1:]]
 
@@ -73,4 +74,15 @@ class NewtonsMethod(BaseSolver):
             #self.weights-= self.learning_rate*   np.linalg.inv(weights_hessian)@ weights_gradient
             self.weights-= self.learning_rate*np.linalg.solve(weights_hessian, weights_gradient)
             self.bias-= self.learning_rate*bias_gradient /bias_hessian
-        return [self.weights,self.bias]
+        return [self.bias,self.weights]
+
+    
+
+
+class LocalWeightedSolver(BaseSolver):
+    def optimize_local(self,model, X_train, y_train, query_point):
+        errors=np.sum((X_train-query_point)**2, axis=1)
+        W = np.diag(np.exp(-errors /(2*model.tau**2)))
+        X_b=_add_intercept(X_train)
+        weights=np.linalg.inv(X_b.T @ W @ X_b) @ (X_b.T @ W @ y_train)
+        return [weights[0],weights[1:]]
