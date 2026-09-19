@@ -29,7 +29,7 @@ class BaseFamily(ABC):
 
 
     @abstractmethod
-    def reverse_link(self,X):
+    def inverse_link(self,X):
         pass
 
     @abstractmethod

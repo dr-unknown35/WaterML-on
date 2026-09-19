@@ -9,7 +9,7 @@ class BaseScaler(ABC):
 
 
     @abstractmethod
-    def transfrom(self,X):
+    def transform(self,X):
         pass
 
 
