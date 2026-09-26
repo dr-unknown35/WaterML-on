@@ -48,9 +48,11 @@ class NormalEquations(BaseSolver):
 
 
 class NewtonsMethod(BaseSolver):
-    def __init__(self,learning_rate=1.0,epochs=10):
+    def __init__(self,learning_rate=1.0,epochs=10,alpha=1.0,penalty=None):
         self.learning_rate=learning_rate
         self.epochs=epochs
+        self.alpha=alpha
+        self.penalty=penalty
         self.weights=None
         self.bias=None
 
@@ -67,8 +69,12 @@ class NewtonsMethod(BaseSolver):
             weights_gradient= (1/n_samples) * X.T @ errors
             bias_gradient= (1/n_samples) * np.sum(errors)
             weights_hessian=(1/n_samples)*(X.T*(variance) )@ X
-            bias_hessian=(1/n_samples)* sum(variance)
+            bias_hessian=(1/n_samples)* np.sum(variance)
             
+            match self.penalty:
+                case "L2":
+                    weights_gradient += self.alpha * self.weights
+                    weights_hessian+=np.diag(self.alpha*np.ones_like(self.weights))
             
             #note to self : apparently it's more numerically stable to use np.solve instead of explicitly calculating the inverse and multiplying...
             #self.weights-= self.learning_rate*   np.linalg.inv(weights_hessian)@ weights_gradient
@@ -80,9 +86,36 @@ class NewtonsMethod(BaseSolver):
 
 
 class LocalWeightedSolver(BaseSolver):
-    def optimize_local(self,model, X_train, y_train, query_point):
+    def optimize(self,model, X_train, y_train, query_point):
         errors=np.sum((X_train-query_point)**2, axis=1)
         W = np.diag(np.exp(-errors /(2*model.tau**2)))
         X_b=_add_intercept(X_train)
         weights=np.linalg.inv(X_b.T @ W @ X_b) @ (X_b.T @ W @ y_train)
         return [weights[0],weights[1:]]
+
+
+
+class PerceptronSolver(BaseSolver):
+    def __init__(self,epochs=1000,batch_size=None,learning_rate=0.28):
+        self.epochs=epochs
+        self.batch_size=batch_size 
+        self.learning_rate=learning_rate
+        self.weights=None
+        self.bias=None
+    
+    
+    def optimize(self,model, X, y):
+        n_samples,n_features=X.shape
+        if self.batch_size is None:
+            self.batch_size = X.shape[0]
+        self.weights=np.zeros(n_features)
+        self.bias=0
+        for _ in range(self.epochs):
+            for i in range(0,n_samples,self.batch_size):
+                X_batch=X[i:i+self.batch_size]
+                y_batch=y[i:i+self.batch_size]
+                y_pred= model._step((X_batch @ self.weights) + self.bias)
+                errors= y_pred-y_batch
+                self.weights-= self.learning_rate*(1/self.batch_size)*X_batch.T@errors
+                self.bias-= self.learning_rate*(1/self.batch_size)*np.sum(errors)
+        return [self.bias,self.weights]

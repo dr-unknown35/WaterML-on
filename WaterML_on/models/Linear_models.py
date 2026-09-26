@@ -47,10 +47,10 @@ class LocalWeightedLR(BaseEstimator):
 
 
     def predict(self,test_X):
-        pred=[]
+        pred=np.array([])
         for row in test_X:
-            self.bias,self.weights=self.solver.optimize_local(self, self.X, self.y, row)
-            pred.append(self.family.inverse_link(row@self.weights +self.bias))
+            self.bias,self.weights=self.solver.optimize(self, self.X, self.y, row)
+            pred=np.append(pred,self.family.inverse_link(row@self.weights +self.bias))
         return pred
 
 

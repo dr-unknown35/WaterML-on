@@ -21,4 +21,4 @@ def r2_score(y_pred,y_target):
     return 1- (ssr/sst)
 
 def MAPE(y_pred,y_target):
-    return 100* np.mean(np.abs(y_target-y_pred) /y_target)
+    return np.mean(np.abs(y_target-y_pred) /y_target)

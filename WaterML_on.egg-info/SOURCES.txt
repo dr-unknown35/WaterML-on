@@ -23,8 +23,10 @@ WaterML_on/models/families.py
 WaterML_on/optim/__init__.py
 WaterML_on/optim/base.py
 WaterML_on/optim/gradient_methods.py
+tests/test_data_utils.py
 tests/test_families.py
 tests/test_linear_regression.py
+tests/test_local_weighted.py
 tests/test_metrics.py
 tests/test_model_selection.py
 tests/test_solvers.py

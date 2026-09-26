@@ -31,7 +31,7 @@ def f1_score(cm):
 
 def deviance(y_target,p_pred):
      p_pred=np.maximum(p_pred,1e-15)
-     return -2* np.sum(y_target*np.log(p_pred) +(1-y_target)*np.log(1-p_pred))
+     return -2* np.sum(y_target*np.log(p_pred) +np.maximum((1-y_target),1e-15)*np.log(np.maximum((1-p_pred),1e-15)))
 
 def log_loss(y_target,p_pred):
      return deviance(y_target,p_pred)/(2*(y_target.shape[0]))
