@@ -20,19 +20,32 @@ class GradientDescent(BaseSolver):
 
     def optimize(self,model, X, y):
         n_samples,n_features=X.shape
+
         if self.batch_size is None:
             self.batch_size = X.shape[0]
-        self.weights=np.zeros(n_features)
-        self.bias=0
+
+
+
+        n_classes=y.shape[1] if y.ndim > 1 else 1
+        self.weights=np.zeros((n_features, n_classes)) if n_classes > 1 else np.zeros(n_features)
+        self.bias=np.zeros(n_classes) if n_classes > 1 else 0
+
+
         for _ in range(self.epochs):
             for i in range(0,n_samples,self.batch_size):
                 X_batch=X[i:i+self.batch_size]
                 y_batch=y[i:i+self.batch_size]
+
+
                 y_pred= model.family.inverse_link((X_batch @ self.weights) + self.bias)
                 errors= y_pred-y_batch
+
+
                 error_gradient= (1/self.batch_size) * X_batch.T @ errors
-                bias_gradient= (1/self.batch_size) * np.sum(errors)
+                bias_gradient= (1/self.batch_size) * np.sum(errors ,axis=0)
                 weights_gradient= error_gradient+self._penalty_gradient(self.weights)
+
+
                 self.weights-= self.learning_rate*weights_gradient
                 if self.penalty in ('L1', 'EN'):
                     self.weights=self._soft_threshold(self.weights,self.learning_rate* self.alpha*(self.l1_ratio if self.penalty=="EN" else 1 ))
