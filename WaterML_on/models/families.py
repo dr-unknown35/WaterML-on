@@ -67,3 +67,18 @@ class InverseGaussian(BaseFamily):
 
     def variance(self,mu):
         return mu**3
+
+
+
+class Multinomial(BaseFamily):
+    def link(self,mu,base_idx):
+        mu=np.clip(mu, 1e-15, 1.0 - 1e-15)
+        return np.log(mu) - np.log(mu[..., base_idx, np.newaxis])
+
+
+    def inverse_link(eta):
+        exp_eta=np.exp(eta-eta.max(axis=1,keepdims=True))
+        return exp_eta/exp_eta.sum(axis=1,keepdims=True)
+    
+    def variance(self,mu):
+            return np.diag(mu)-(mu@mu.T)

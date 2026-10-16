@@ -1,6 +1,6 @@
 from .base import BaseEstimator
 from ..optim.gradient_methods import GradientDescent , NormalEquations, NewtonsMethod,LocalWeightedSolver
-from .families import Gaussian, Binomial , Poisson , Gamma
+from .families import Gaussian, Binomial , Poisson , Gamma, Multinomial
 import numpy as np
 
 class GLM(BaseEstimator):
@@ -92,3 +92,14 @@ class GammaRegression(GLM):
 class InverseGaussianRegression(GLM):
     def __init__(self,solver=GradientDescent()):
         super().__init__(family=InverseGaussianRegression(),solver=solver)
+
+class SoftmaxRegression(GLM):
+    def __init__(self,solver=GradientDescent()):
+            super().__init__(family=Multinomial(),solver=solver)
+
+
+
+
+
+
+
