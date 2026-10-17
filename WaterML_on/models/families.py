@@ -73,10 +73,11 @@ class InverseGaussian(BaseFamily):
 class Multinomial(BaseFamily):
     def link(self,mu,base_idx):
         mu=np.clip(mu, 1e-15, 1.0 - 1e-15)
-        return np.log(mu) - np.log(mu[..., base_idx, np.newaxis])
+        baseline_col=mu[:, base_idx] 
+        return np.log(mu) -np.log(baseline_col[:, np.newaxis])
 
 
-    def inverse_link(eta):
+    def inverse_link(self,eta):
         exp_eta=np.exp(eta-eta.max(axis=1,keepdims=True))
         return exp_eta/exp_eta.sum(axis=1,keepdims=True)
     
