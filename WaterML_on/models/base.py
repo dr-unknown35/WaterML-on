@@ -35,3 +35,22 @@ class BaseFamily(ABC):
     @abstractmethod
     def variance(self,X):
         pass
+
+
+
+
+class baseSVM(ABC):
+    @abstractmethod
+    def fit(self):
+        pass
+    
+    @abstractmethod
+    def predict(self):
+        pass
+        
+    
+    def predict_raw(self,X):
+        return X@self.weights +self.bias
+
+
+
