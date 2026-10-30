@@ -26,7 +26,10 @@ class GLM(BaseEstimator):
 
     def predict_class(self,X,threshold=0.5):
         return (self.predict(X)>=threshold).astype(int)
-
+    
+    
+    def get_gradient(self,X,weights,bias):
+        return self.family.inverse_link((X @ weights) + bias)
 
 
 class LocalWeightedLR(BaseEstimator):
