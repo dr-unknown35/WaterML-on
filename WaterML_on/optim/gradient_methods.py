@@ -7,15 +7,17 @@ import numpy as np
 
 
 class GradientDescent(BaseSolver):
-    def __init__(self,epochs=1000,batch_size=None,learning_rate=0.28,penalty=None,alpha=1,l1_ratio=0):
+    def __init__(self,epochs=1000,batch_size=None,learning_rate=0.28,penalty=None,alpha=1,l1_ratio=0,decay=0):
         self.epochs=epochs
         self.batch_size=batch_size 
         self.learning_rate=learning_rate
         self.penalty=penalty
         self.alpha=alpha
+        self.l1_ratio=l1_ratio
+        self.decay=decay
         self.weights=None
         self.bias=None
-        self.l1_ratio=l1_ratio
+        
 
 
     def optimize(self,model, X, y):
@@ -31,13 +33,14 @@ class GradientDescent(BaseSolver):
         self.bias=np.zeros(n_classes) if n_classes > 1 else 0
 
 
-        for _ in range(self.epochs):
+        for t in range(self.epochs):
+            lr_t=self.lr/(1 + self.decay*t)
             for i in range(0,n_samples,self.batch_size):
                 X_batch=X[i:i+self.batch_size]
                 y_batch=y[i:i+self.batch_size]
 
 
-                y_pred= model.family.inverse_link((X_batch @ self.weights) + self.bias)
+                y_pred= model.get_gradient(X_batch,self.weights,self.bias)
                 errors= y_pred-y_batch
 
 
@@ -46,10 +49,10 @@ class GradientDescent(BaseSolver):
                 weights_gradient= error_gradient+self._penalty_gradient(self.weights)
 
 
-                self.weights-= self.learning_rate*weights_gradient
+                self.weights-= lr_t*weights_gradient
                 if self.penalty in ('L1', 'EN'):
-                    self.weights=self._soft_threshold(self.weights,self.learning_rate* self.alpha*(self.l1_ratio if self.penalty=="EN" else 1 ))
-                self.bias-= self.learning_rate*bias_gradient
+                    self.weights=self._soft_threshold(self.weights,lr_t* self.alpha*(self.l1_ratio if self.penalty=="EN" else 1 ))
+                self.bias-= lr_t*bias_gradient
 
         return [self.bias,self.weights]
 
@@ -75,7 +78,7 @@ class NewtonsMethod(BaseSolver):
         self.weights=np.zeros(n_features)
         self.bias=0
         for _ in range(self.epochs):
-            y_pred= model.family.inverse_link((X @ self.weights) + self.bias)
+            y_pred= model.get_gradient(X,self.weights,self.bias)
             variance=model.family.variance(y_pred)
             errors= y_pred-y
             
