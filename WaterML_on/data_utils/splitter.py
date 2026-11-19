@@ -28,4 +28,18 @@ def train_test_split(X, y, test_size=0.2, random_state=None, shuffle=True):
 
 
 
+def stratified_Kfolds(y, nb_folds=5,random_state=None,shuffle=True):
+    y=np.asarray(y)
+    classes,counts=np.unique(y, return_counts=True)
+    minimum=np.min(counts)
+    if minimum <nb_folds:
+        raise ValueError(f"Cannot Stratify: Class with {min} members has less than number of folds {nb_folds}")
+    rng=np.random.default_rng(random_state)
+    chunks=[]
+    for c in classes:
+        idx_c=rng.permutation(np.where(y==c)[0]) if shuffle else np.where(y==c)[0]
+        chunks.append(np.array_split(idx_c,nb_folds))
+
+    for i in range(nb_folds):
+        yield np.concatenate([chunk[idx] for chunk in chunks for idx in range(nb_folds) if idx!=i  ]),np.concatenate([chunk[i] for chunk in chunks])
 
