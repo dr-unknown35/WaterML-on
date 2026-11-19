@@ -1,5 +1,5 @@
 import numpy as np
-
+from ..data_utils.preprocessor import one_hot
 
 
 
@@ -33,6 +33,15 @@ def deviance(y_target,p_pred):
      p_pred=np.maximum(p_pred,1e-15)
      return -2* np.sum(y_target*np.log(p_pred) +np.maximum((1-y_target),1e-15)*np.log(np.maximum((1-p_pred),1e-15)))
 
+
+
+
+
+
 def log_loss(y_target,p_pred):
-     return deviance(y_target,p_pred)/(2*(y_target.shape[0]))
+     p_pred=p_pred.ravel() if np.ndim(p_pred)==2 and p_pred.shape[1]==1 else p_pred
+     p_pred=np.column_stack([1-p_pred,p_pred]) if np.ndim(p_pred)==1 else p_pred
+     p_pred=np.clip(p_pred, 1e-15, 1)
+     one_hot_y=one_hot(y_target.astype(int),p_pred.shape[1])
+     return -1/(y_target.shape[0]) *np.sum(one_hot_y*np.log(p_pred))
 
