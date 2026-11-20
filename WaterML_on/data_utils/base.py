@@ -16,3 +16,11 @@ class BaseScaler(ABC):
     def fit_transform(self,X):
         self.fit(X)
         return self.transform(X)
+    
+
+
+
+class BaseSplitter(ABC):
+    @abstractmethod
+    def self(self,X,y=None):
+        pass
