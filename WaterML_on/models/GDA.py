@@ -3,12 +3,12 @@ import numpy as np
 
 
 class Linear:
-    def __init__(self):
+       def __init__(self):
         self.priors=None
         self.means=None
         self.covariances=None
 
-    def fit(self, X, y):
+       def fit(self, X, y):
             counts=np.bincount(y)
             self.priors=counts/len(y)
             #count each class' occurence and find the proportion of that class in y
@@ -30,11 +30,11 @@ class Linear:
       
 
 
-    def predict(self, X):
+       def predict_proba(self, X):
             #$$\large f(x; \mu, \Sigma) = \frac{1}{(2\pi)^{k/2} |\Sigma|^{1/2}} \exp\left(-\frac{1}{2} (x - \mu)^T \Sigma^{-1} (x - \mu)\right)$$
 
 
-            scale_factor=1/(((2*np.pi)**((X.shape[1])/2))* np.sqrt(np.linalg.det(self.covariance)))
+            log_scale_factor=-0.5*(np.log(2*np.pi)*(X.shape[1])+np.linalg.slogdet(self.covariance)[1])
             inv=np.linalg.inv(self.covariance)
             #scale factor for multinomial gaussian distribution , to normalize the probabilities into [0,1]
             conditionals=[]
@@ -43,7 +43,7 @@ class Linear:
                   #calculate mean centered data points
                   m=diff@inv
                   #diff with shape (N,P), inverse cov matrix with shape (P,P). matrix multiply to standardize features and rotate data to reduce correlation. shape(N,P)
-                  conditionals.append(self.priors[k]*scale_factor * np.exp((-1/2) * np.sum(m * diff, axis=1)))
+                  conditionals.append(np.log(self.priors[k])+log_scale_factor -0.5 * np.sum(m * diff, axis=1))
                   #the term inside the exponential is called the squared Mahalanobis distance $$D_M^2 = (x - \mu)^T \Sigma^{-1} (x - \mu)$$
                   #which measures how far a point is from the mean of a multivariate distribution
 
@@ -51,19 +51,23 @@ class Linear:
                   #multiply each feature for each datapoint with it's covariance , sum on rows to obtain the squared distance from the mean for each datapoint.
                   #this distance is passed through a gaussian bell curve so that datapoints that are farther from the mean have lower probability.
                   #multiply the prior , scale factor and conditional to obtain the posterior probability that a given datapoint belongs to a certain class. shape(D,N)
+            conditionals=np.column_stack(conditionals)
+            shifted_exp=np.exp(conditionals-np.max(conditionals,axis=1,keepdims=True))
+            return shifted_exp/np.sum(shifted_exp,axis=1,keepdims=True)
+    
 
-
-            return np.argmax(np.array(conditionals),axis=0)
+       def predict(self,X):
+          return np.argmax(self.predict_proba(X),axis=1)
             #pick which of the D classes has the highest probability for each of the N rows.
 
 
 class Quadratic:
-    def __init__(self):
+       def __init__(self):
         self.priors=None
         self.means=None
         self.covariances=None
-
-    def fit(self, X, y):
+      
+       def fit(self, X, y):
             counts=np.bincount(y)
             self.priors=counts/len(y)
 
@@ -84,17 +88,24 @@ class Quadratic:
 
             self.means,self.covariances=np.array(self.means),np.array(self.covariances)
 
-    def predict(self, X):
+       def predict_proba(self, X):
             conditionals=[]
             for k in range(len(self.priors)):
-                  scale_factor=1/(((2*np.pi)**((X.shape[1])/2))* np.sqrt(np.linalg.det(self.covariances[k])))
+                  log_scale_factor=-0.5*(np.log(2*np.pi)*(X.shape[1])+np.linalg.slogdet(self.covariances[k])[1])
                   inv=np.linalg.inv(self.covariances[k])
                   diff=X-self.means[k]
                   
                   m=diff@inv
 
-                  conditionals.append(self.priors[k]*scale_factor * np.exp((-1/2) * np.sum(m * diff, axis=1)))
+                  conditionals.append(np.log(self.priors[k])+log_scale_factor -0.5 * np.sum(m * diff, axis=1))
                   
 
-            return np.argmax(np.array(conditionals),axis=0)
+            conditionals=np.column_stack(conditionals)
+            shifted_exp=np.exp(conditionals-np.max(conditionals,axis=1,keepdims=True))
+            return shifted_exp/np.sum(shifted_exp,axis=1,keepdims=True)
+
+
+
+       def predict(self,X):
+              return np.argmax(self.predict_proba(X),axis=1)
             #pick which of the D classes has the highest probability for each of the N rows.
