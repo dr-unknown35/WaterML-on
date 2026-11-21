@@ -34,21 +34,18 @@ class GradientDescent(BaseSolver):
 
 
         for t in range(self.epochs):
-            lr_t=self.lr/(1 + self.decay*t)
+            lr_t=self.learning_rate/(1 + self.decay*t)
             for i in range(0,n_samples,self.batch_size):
                 X_batch=X[i:i+self.batch_size]
                 y_batch=y[i:i+self.batch_size]
 
 
-                y_pred= model.get_gradient(X_batch,self.weights,self.bias)
-                errors= y_pred-y_batch
+                bias_gradient,weights_gradient=model.get_gradient(X_batch,y_batch,self.weights,self.bias)
 
 
-                error_gradient= (1/self.batch_size) * X_batch.T @ errors
-                bias_gradient= (1/self.batch_size) * np.sum(errors ,axis=0)
-                weights_gradient= error_gradient+self._penalty_gradient(self.weights)
-
-
+                weights_gradient+=self._penalty_gradient(self.weights)
+                
+                
                 self.weights-= lr_t*weights_gradient
                 if self.penalty in ('L1', 'EN'):
                     self.weights=self._soft_threshold(self.weights,lr_t* self.alpha*(self.l1_ratio if self.penalty=="EN" else 1 ))
@@ -78,12 +75,8 @@ class NewtonsMethod(BaseSolver):
         self.weights=np.zeros(n_features)
         self.bias=0
         for _ in range(self.epochs):
-            y_pred= model.get_gradient(X,self.weights,self.bias)
-            variance=model.family.variance(y_pred)
-            errors= y_pred-y
-            
-            weights_gradient= (1/n_samples) * X.T @ errors
-            bias_gradient= (1/n_samples) * np.sum(errors)
+            bias_gradient,weights_gradient= model.get_gradient(X,y,self.weights,self.bias)
+            variance=model.family.variance(model.family.inverse_link(X@ self.weights +self.bias))
             weights_hessian=(1/n_samples)*(X.T*(variance) )@ X
             bias_hessian=(1/n_samples)* np.sum(variance)
             
