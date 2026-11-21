@@ -51,15 +51,10 @@ class PrimalSubGD(baseSVM):
         return self
     
     
-    def predict(self,X):
-        return np.where(X@self.weights +self.bias >=0, 1,0)
-    
-    
-    
     
     def get_gradient(self,X,y,weights,bias):
         #because maximal marginal classifiers have low bias , they will inevitablely have high variance 
-        #if a point is misclassified is will singlehandedly shift the entire hyperplane away from it's "correct" class and will cause it to misclassify future points.
+        #if a point is misclassified is will single handedly shift the entire hyperplane away from it's "correct" class and will cause it to misclassify future points.
         #which is why we use a soft margin classifier :we let points violate the margin and pay a penalty. A point’s cost is determined by it's 'correctness score' , the functional margin.
         # loss_i = $\Large max(0, 1 − y_i(w^T x_i + b))\qquad\qquad$
         
@@ -68,16 +63,17 @@ class PrimalSubGD(baseSVM):
         #if the functional margin is between $0 ≤ Value < 1$then the point is correctly classified but is too close to the decision boundary (inside the margin).
         #if the functional margin is $<0$then the point falls on the wrong side of the decision boundary entirely. heavily penalized
         
-    
         
         violating_margin= y *(X@weights +bias) <1 #get points that violate the margin 
-        #the functional margin isn't exaclty differentiable for all its values since it has a sharp corner for $m<1$$l=1-m$ and $m>=1$$l=0$  with m = $y_i(w^T x_i + b)$
+        #the functional margin isn't exaclty differentiable for all its values since it has a sharp corner for $m<1$$l=1-m$ and $m>=1$$l=0$  with $\large m = y_i(w^T x_i + b)\enspace$
         #so we use a subgradient for our weights and bias gradients , for $w$ the gradient is  $−y_i x_i$ for $m<1$ and $0$ otherwise
         #for $b$ the gradient is $-y_i$ for $m<1$ and $0$ otherwise 
         
-        return (-(X[violating_margin].T @ y[violating_margin]) / X.shape[0],-np.sum(y[violating_margin]) / X.shape[0])
+        return (-np.sum(y[violating_margin]) / X.shape[0],-(X[violating_margin].T @ y[violating_margin]) / X.shape[0])
     
 
+    def predict(self,X):
+        return np.where(X@self.weights +self.bias >=0, 1,0)
 
 
 
