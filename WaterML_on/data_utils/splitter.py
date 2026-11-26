@@ -36,7 +36,7 @@ class Kfolds(BaseSplitter):
 
     def split(self,X,y=None):
         n_samples=X.shape[0]
-        folds=np.array_split(self._shuffle_indices(n_samples) if self.shuffle else np.arrange(n_samples), self.nb_folds)
+        folds=np.array_split(self._shuffle_indices(n_samples) if self.shuffle else np.arange(n_samples), self.nb_folds)
         for i in range(self.nb_folds):
             yield np.concatenate(folds[:i]+folds[i+1:]),folds[i]
 
