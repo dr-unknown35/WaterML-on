@@ -1,22 +1,30 @@
-"""
-Tests for WaterML_on.metrics
-
-ASSUMPTIONS: regression metrics in WaterML_on.metrics.regression
-(MSE, MAE, RMSE, r2_score, MAPE), classification metrics in
-WaterML_on.metrics.classification (confusion_matrix, accuracy, precision,
-recall, specificity, f1_score, deviance). Adjust names/paths if yours differ.
-"""
 import numpy as np
+import pytest
 from sklearn.metrics import (
-    mean_squared_error, mean_absolute_error, r2_score as sk_r2_score,
-    accuracy_score, precision_score, recall_score, f1_score as sk_f1_score,
-    confusion_matrix as sk_confusion_matrix, log_loss as sk_log_loss,
+    accuracy_score,
+    confusion_matrix as sk_confusion_matrix,
+    f1_score as sk_f1_score,
+    log_loss as sk_log_loss,
+    mean_absolute_error,
+    mean_absolute_percentage_error,
+    mean_poisson_deviance,
+    mean_squared_error,
+    precision_score,
+    r2_score as sk_r2_score,
+    recall_score,
 )
 
-from WaterML_on.metrics.Regression import MSE, MAE, RMSE, r2_score, MAPE
 from WaterML_on.metrics.Classification import (
-    confusion_matrix, accuracy, precision, recall, specificity, f1_score, deviance,
+    accuracy,
+    confusion_matrix,
+    deviance,
+    f1_score,
+    log_loss,
+    precision,
+    recall,
+    specificity,
 )
+from WaterML_on.metrics.Regression import MAE, MAPE, MSE, RMSE, poisson_deviance, r2_score
 
 
 def test_regression_metrics_match_sklearn():
@@ -30,28 +38,70 @@ def test_regression_metrics_match_sklearn():
     assert np.isclose(r2_score(y_pred, y_true), sk_r2_score(y_true, y_pred))
 
 
-def test_mape_is_reasonable_on_known_values():
-    y_true = np.array([100.0, 200.0, 300.0])
-    y_pred = np.array([110.0, 190.0, 300.0])
-    # errors are 10%, 5%, 0% -> mean = 5%
-    expected_mape = (0.10 + 0.05 + 0.0) / 3
-    assert np.isclose(MAPE(y_pred, y_true), expected_mape, atol=1e-6)
+def test_r2_score_handles_shape_errors_and_constant_targets():
+    y_true = np.array([2.0, 2.0, 2.0])
+
+    assert r2_score(y_true, y_true) == 1.0
+    assert r2_score(y_true + 1.0, y_true) == 0.0
+
+    with pytest.raises(ValueError):
+        r2_score(np.ones(3), np.ones(2))
+
+
+def test_mape_matches_sklearn_on_positive_and_negative_targets():
+    y_true = np.array([100.0, -200.0, 300.0, -50.0])
+    y_pred = np.array([110.0, -190.0, 285.0, -60.0])
+
+    assert np.isclose(
+        MAPE(y_pred, y_true), mean_absolute_percentage_error(y_true, y_pred)
+    )
+
+
+def test_mape_zero_handling_matches_masked_sklearn_reference():
+    y_true = np.array([100.0, 0.0, 200.0, 0.0])
+    y_pred = np.array([110.0, 5.0, 190.0, 7.0])
+    mask = y_true != 0
+
+    assert np.isclose(
+        MAPE(y_pred, y_true, ignore_zeros=True),
+        mean_absolute_percentage_error(y_true[mask], y_pred[mask]),
+    )
+    with pytest.raises(ValueError):
+        MAPE(y_pred, y_true)
+    with pytest.raises(ValueError):
+        MAPE(np.array([1.0, 2.0]), np.zeros(2), ignore_zeros=True)
+
+
+def test_mape_rejects_scalars_and_mismatched_shapes():
+    with pytest.raises(ValueError):
+        MAPE(1.0, np.array([1.0]))
+    with pytest.raises(ValueError):
+        MAPE(np.array([1.0]), np.array([1.0, 2.0]))
+
+
+def test_poisson_deviance_matches_sklearn():
+    rng = np.random.default_rng(1)
+    y_true = rng.poisson(3.0, size=100)
+    y_pred = rng.uniform(0.5, 5.0, size=100)
+
+    actual = poisson_deviance(y_true, y_pred)
+    expected = len(y_true) * mean_poisson_deviance(y_true, y_pred)
+
+    assert np.isclose(actual, expected, rtol=1e-9)
 
 
 def test_confusion_matrix_matches_sklearn():
     y_true = np.array([0, 1, 1, 0, 1, 0, 0, 1])
     y_pred = np.array([0, 1, 0, 0, 1, 1, 0, 1])
 
-    cm = confusion_matrix(y_true, y_pred)
-    sk_cm = sk_confusion_matrix(y_true, y_pred)
-
-    assert np.array_equal(cm, sk_cm.ravel())
+    assert np.array_equal(
+        confusion_matrix(y_true, y_pred), sk_confusion_matrix(y_true, y_pred).ravel()
+    )
 
 
 def test_classification_metrics_match_sklearn():
     y_true = np.array([0, 1, 1, 0, 1, 0, 0, 1, 1, 0])
     y_pred = np.array([0, 1, 0, 0, 1, 1, 0, 1, 1, 1])
-
     cm = confusion_matrix(y_true, y_pred)
 
     assert np.isclose(accuracy(cm), accuracy_score(y_true, y_pred))
@@ -61,37 +111,33 @@ def test_classification_metrics_match_sklearn():
 
 
 def test_specificity_is_recall_of_the_negative_class():
-    """
-    sklearn has no direct specificity function, but specificity is
-    recall_score computed on the flipped/negative class — a good
-    independent way to check the formula rather than trusting it blindly.
-    """
     y_true = np.array([0, 1, 1, 0, 1, 0, 0, 1, 1, 0])
     y_pred = np.array([0, 1, 0, 0, 1, 1, 0, 1, 1, 1])
-
     cm = confusion_matrix(y_true, y_pred)
-    expected_specificity = recall_score(1 - y_true, 1 - y_pred)
-    assert np.isclose(specificity(cm), expected_specificity)
+
+    assert np.isclose(specificity(cm), recall_score(1 - y_true, 1 - y_pred))
+
+
+def test_binary_log_loss_matches_sklearn():
+    rng = np.random.default_rng(2)
+    y_true = rng.integers(0, 2, size=80)
+    p_pred = rng.uniform(0.01, 0.99, size=80)
+
+    assert np.isclose(log_loss(y_true, p_pred), sk_log_loss(y_true, p_pred))
 
 
 def test_deviance_matches_sklearn_log_loss_up_to_constant():
-    """
-    Binomial deviance = 2 * n * log_loss (log_loss is the mean, deviance
-    is the raw sum times 2). Checking this relationship is a more honest
-    test than hand-deriving deviance independently.
-    """
-    rng = np.random.default_rng(1)
+    rng = np.random.default_rng(3)
     y_true = rng.integers(0, 2, size=100)
     p_pred = np.clip(rng.uniform(size=100), 1e-10, 1 - 1e-10)
 
-    sk_loss = sk_log_loss(y_true, p_pred)
-    expected_deviance = 2 * len(y_true) * sk_loss
+    expected = 2 * len(y_true) * sk_log_loss(y_true, p_pred)
 
-    assert np.isclose(deviance(y_true, p_pred), expected_deviance, rtol=1e-4)
+    assert np.isclose(deviance(y_true, p_pred), expected, rtol=1e-8)
 
 
 def test_deviance_handles_extreme_probabilities_without_nan():
     y_true = np.array([1, 0, 1, 0])
-    p_pred = np.array([1.0, 0.0, 1.0, 0.0])  # exactly at the boundary
-    result = deviance(y_true, p_pred)
-    assert np.isfinite(result)
+    p_pred = np.array([1.0, 0.0, 1.0, 0.0])
+
+    assert np.isfinite(deviance(y_true, p_pred))

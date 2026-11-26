@@ -1,61 +1,102 @@
-"""
-Tests for WaterML_on.models.families
-
-ASSUMPTION: families live at WaterML_on.models.families. If yours are
-elsewhere (e.g. a top-level WaterML_on.families module), just fix the
-import line below — nothing else changes.
-"""
 import numpy as np
 import pytest
 
-from WaterML_on.models.families import Gaussian, Binomial, Poisson, Gamma, InverseGaussian
+from WaterML_on.models.families import (
+    Binomial,
+    Gamma,
+    Gaussian,
+    InverseGaussian,
+    Multinomial,
+    Poisson,
+)
 
 
-@pytest.mark.parametrize("family_class,mu,expected_variance", [
-    (Gaussian, np.array([0.5, 2.0, 10.0]), np.array([1.0, 1.0, 1.0])),
-    (Binomial, np.array([0.5]), np.array([0.25])),          # p(1-p) at p=0.5
-    (Binomial, np.array([0.1]), np.array([0.09])),           # 0.1 * 0.9
-    (Poisson, np.array([3.0, 7.5]), np.array([3.0, 7.5])),   # variance == mean
-    (Gamma, np.array([2.0]), np.array([4.0])),                # mu^2
-    (InverseGaussian, np.array([2.0]), np.array([8.0])),       # mu^3
-])
+@pytest.mark.parametrize(
+    "family_class,mu,expected_variance",
+    [
+        (Gaussian, np.array([0.5, 2.0, 10.0]), np.array([1.0, 1.0, 1.0])),
+        (Binomial, np.array([0.5]), np.array([0.25])),
+        (Binomial, np.array([0.1]), np.array([0.09])),
+        (Poisson, np.array([3.0, 7.5]), np.array([3.0, 7.5])),
+        (Gamma, np.array([2.0]), np.array([4.0])),
+        (InverseGaussian, np.array([2.0]), np.array([8.0])),
+    ],
+)
 def test_variance_formulas(family_class, mu, expected_variance):
-    family = family_class()
-    result = family.variance(mu)
-    assert np.allclose(result, expected_variance)
+    assert np.allclose(family_class().variance(mu), expected_variance)
 
 
-@pytest.mark.parametrize("family_class", [Gaussian, Binomial, Poisson, Gamma, InverseGaussian])
+@pytest.mark.parametrize(
+    "family_class", [Gaussian, Binomial, Poisson, Gamma, InverseGaussian]
+)
 def test_link_inverse_link_are_true_inverses(family_class):
-    """
-    link(inverse_link(eta)) should return eta (up to clipping at extreme
-    values). This is the property that actually matters for a GLM — if
-    these aren't inverses of each other, predict() and the solvers will
-    silently disagree with each other's math.
-    """
-    family = family_class()
-    eta = np.array([0.5, 1.0, 2.0])  # moderate values, away from clipping edges
-    mu = family.inverse_link(eta)
-    eta_roundtrip = family.link(mu)
-    assert np.allclose(eta, eta_roundtrip, atol=1e-6)
+    eta = np.array([0.5, 1.0, 2.0])
+    roundtrip = family_class().link(family_class().inverse_link(eta))
+
+    assert np.allclose(eta, roundtrip, atol=1e-6)
 
 
 def test_binomial_inverse_link_matches_sigmoid():
-    binomial = Binomial()
     eta = np.array([-2.0, 0.0, 2.0])
     expected = 1 / (1 + np.exp(-eta))
-    assert np.allclose(binomial.inverse_link(eta), expected)
+
+    assert np.allclose(Binomial().inverse_link(eta), expected)
 
 
 def test_poisson_inverse_link_matches_exp():
-    poisson = Poisson()
     eta = np.array([-1.0, 0.0, 1.0])
-    assert np.allclose(poisson.inverse_link(eta), np.exp(eta))
+
+    assert np.allclose(Poisson().inverse_link(eta), np.exp(eta))
 
 
 def test_binomial_link_handles_boundary_values_without_error():
-    """Regression test for the clipping you added around log(p/(1-p))."""
-    binomial = Binomial()
-    mu = np.array([0.0, 1.0, 0.5])
-    result = binomial.link(mu)  # should not raise, should not be inf/nan
+    result = Binomial().link(np.array([0.0, 1.0, 0.5]))
+
     assert np.all(np.isfinite(result))
+
+
+def test_exponential_families_clip_extreme_linear_predictors():
+    eta = np.array([-1000.0, 1000.0])
+
+    for family in (Binomial, Poisson, Gamma, InverseGaussian):
+        result = family().inverse_link(eta)
+        assert np.all(np.isfinite(result))
+        assert np.all(result >= 0)
+
+
+def test_multinomial_inverse_link_matches_stable_softmax():
+    rng = np.random.default_rng(3)
+    eta = rng.normal(size=(12, 4))
+    shifted = eta - eta.max(axis=1, keepdims=True)
+    expected = np.exp(shifted) / np.exp(shifted).sum(axis=1, keepdims=True)
+
+    actual = Multinomial().inverse_link(eta)
+
+    assert np.allclose(actual, expected)
+    assert np.allclose(actual.sum(axis=1), 1)
+
+
+def test_multinomial_link_inverse_link_roundtrip_is_centered():
+    rng = np.random.default_rng(4)
+    eta = rng.normal(size=(10, 3))
+    mu = Multinomial().inverse_link(eta)
+
+    roundtrip = Multinomial().link(mu)
+
+    assert np.allclose(roundtrip, eta - eta[:, [-1]])
+
+
+def test_multinomial_variance_matches_categorical_covariance():
+    mu_1d = np.array([0.2, 0.5, 0.3])
+    expected_1d = np.diag(mu_1d) - np.outer(mu_1d, mu_1d)
+
+    assert np.allclose(Multinomial().variance(mu_1d), expected_1d)
+
+    rng = np.random.default_rng(5)
+    mu_2d = rng.dirichlet(np.ones(3), size=8)
+    actual_2d = Multinomial().variance(mu_2d)
+
+    assert actual_2d.shape == (8, 3, 3)
+    for row_idx in range(mu_2d.shape[0]):
+        expected = np.diag(mu_2d[row_idx]) - np.outer(mu_2d[row_idx], mu_2d[row_idx])
+        assert np.allclose(actual_2d[row_idx], expected)

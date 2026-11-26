@@ -1,94 +1,111 @@
-"""
-Tests for WaterML_on.data_utils
-
-ASSUMPTIONS: train_test_split/Kfolds_split live in
-WaterML_on.data_utils.splitting; StandardScaler/MinMaxScaler in
-WaterML_on.data_utils.scaling; add_intercept in
-WaterML_on.data_utils.preprocessing. Adjust import paths if yours differ.
-"""
 import numpy as np
+import pytest
+from sklearn.preprocessing import MinMaxScaler as SKMinMaxScaler
+from sklearn.preprocessing import StandardScaler as SKStandardScaler
 
-from WaterML_on.data_utils.splitter import train_test_split, Kfolds_split
-from WaterML_on.data_utils.scaler import StandardScaler, MinMaxScaler
-from WaterML_on.data_utils.preprocessor import _add_intercept
-
-
-def test_train_test_split_sizes_and_no_overlap(diabetes_data):
-    X, y = diabetes_data
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0)
-
-    n_samples = X.shape[0]
-    assert X_train.shape[0] + X_test.shape[0] == n_samples
-    assert X_test.shape[0] == int(n_samples * 0.2)
-
-    # No row should appear in both splits — check via a value-based set
-    # comparison since we don't have the raw indices here.
-    train_set = {tuple(row) for row in X_train}
-    test_set = {tuple(row) for row in X_test}
-    assert train_set.isdisjoint(test_set)
+from WaterML_on.data_utils.preprocessor import _add_intercept, one_hot
+from WaterML_on.data_utils.scaler import MinMaxScaler, StandardScaler
+from WaterML_on.data_utils.splitter import Kfolds, Stratified_Kfolds
 
 
-def test_train_test_split_is_reproducible_with_same_seed(diabetes_data):
-    X, y = diabetes_data
-    split_a = train_test_split(X, y, test_size=0.2, random_state=42)
-    split_b = train_test_split(X, y, test_size=0.2, random_state=42)
-    for a, b in zip(split_a, split_b):
-        assert np.array_equal(a, b)
-
-
-def test_kfold_split_covers_every_sample_exactly_once_as_test(diabetes_data):
-    X, y = diabetes_data
-    n_samples = X.shape[0]
-    nb_folds = 5
-
-    all_test_indices = []
-    for train_idx, test_idx in Kfolds_split(n_samples, nb_folds, random_state=0):
-        # train and test indices for this fold shouldn't overlap
-        assert set(train_idx).isdisjoint(set(test_idx))
-        # every fold's train+test should cover the whole dataset
-        assert len(train_idx) + len(test_idx) == n_samples
-        all_test_indices.extend(test_idx)
-
-    # across all folds, every sample should show up as "test" exactly once
-    assert sorted(all_test_indices) == list(range(n_samples))
-
-
-def test_standard_scaler_produces_zero_mean_unit_std(diabetes_data):
+def test_kfolds_split_covers_every_sample_exactly_once_as_test(diabetes_data):
     X, _ = diabetes_data
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
+    folds = list(Kfolds(nb_folds=5, random_state=0).split(X))
 
-    assert np.allclose(X_scaled.mean(axis=0), 0, atol=1e-8)
-    assert np.allclose(X_scaled.std(axis=0), 1, atol=1e-8)
+    assert len(folds) == 5
+    all_test_indices = []
+    for train_idx, test_idx in folds:
+        assert set(train_idx).isdisjoint(set(test_idx))
+        assert len(train_idx) + len(test_idx) == X.shape[0]
+        all_test_indices.extend(test_idx.tolist())
+
+    assert sorted(all_test_indices) == list(range(X.shape[0]))
+
+
+def test_kfolds_split_is_reproducible_with_same_seed(diabetes_data):
+    X, _ = diabetes_data
+    split_a = list(Kfolds(nb_folds=5, random_state=42).split(X))
+    split_b = list(Kfolds(nb_folds=5, random_state=42).split(X))
+
+    for (train_a, test_a), (train_b, test_b) in zip(split_a, split_b):
+        assert np.array_equal(train_a, train_b)
+        assert np.array_equal(test_a, test_b)
+
+
+def test_kfolds_split_without_shuffle_uses_contiguous_folds(diabetes_data):
+    X, _ = diabetes_data
+    folds = list(Kfolds(nb_folds=5, shuffle=False).split(X))
+
+    for fold_idx, (_, test_idx) in enumerate(folds):
+        expected = np.array_split(np.arange(X.shape[0]), 5)[fold_idx]
+        assert np.array_equal(test_idx, expected)
+
+
+def test_stratified_kfolds_preserves_class_ratios(breast_cancer_data):
+    X, y = breast_cancer_data
+    folds = list(Stratified_Kfolds(nb_folds=5, random_state=0).split(X, y))
+
+    assert len(folds) == 5
+    all_test_indices = []
+    for train_idx, test_idx in folds:
+        assert set(train_idx).isdisjoint(set(test_idx))
+        assert np.isclose(np.mean(y[test_idx] == 1), np.mean(y == 1), atol=0.03)
+        all_test_indices.extend(test_idx.tolist())
+
+    assert sorted(all_test_indices) == list(range(X.shape[0]))
+
+
+def test_stratified_kfolds_rejects_class_smaller_than_fold_count():
+    X = np.arange(20).reshape(10, 2)
+    y = np.array([0] * 9 + [1])
+
+    with pytest.raises(ValueError):
+        list(Stratified_Kfolds(nb_folds=5, shuffle=False).split(X, y))
+
+
+def test_standard_scaler_matches_sklearn(diabetes_data):
+    X, _ = diabetes_data
+    expected = SKStandardScaler().fit_transform(X)
+    actual = StandardScaler().fit_transform(X)
+
+    assert np.allclose(actual, expected)
 
 
 def test_standard_scaler_uses_training_stats_on_new_data(diabetes_data):
-    """
-    The whole point of separate fit/transform: transforming a different
-    dataset should NOT recompute statistics from that new data.
-    """
     X, _ = diabetes_data
     scaler = StandardScaler().fit(X[:300])
 
-    transformed_full = scaler.transform(X)
-    # mean of the full transformed set should generally NOT be exactly 0,
-    # since it was scaled using only the first 300 rows' statistics
-    assert not np.allclose(transformed_full.mean(axis=0), 0, atol=1e-8)
+    actual = scaler.transform(X)
+    expected = (X - np.mean(X[:300], axis=0)) / np.std(X[:300], axis=0)
+
+    assert np.allclose(actual, expected)
+    assert not np.allclose(actual.mean(axis=0), 0, atol=1e-8)
 
 
-def test_minmax_scaler_bounds_are_zero_and_one(diabetes_data):
+def test_minmax_scaler_matches_sklearn(diabetes_data):
     X, _ = diabetes_data
-    scaler = MinMaxScaler()
-    X_scaled = scaler.fit_transform(X)
+    expected = SKMinMaxScaler().fit_transform(X)
+    actual = MinMaxScaler().fit_transform(X)
 
-    assert np.allclose(X_scaled.min(axis=0), 0, atol=1e-8)
-    assert np.allclose(X_scaled.max(axis=0), 1, atol=1e-8)
+    assert np.allclose(actual, expected)
+    assert np.allclose(actual.min(axis=0), 0)
+    assert np.allclose(actual.max(axis=0), 1)
 
 
 def test_add_intercept_prepends_column_of_ones():
     X = np.array([[1.0, 2.0], [3.0, 4.0]])
-    X_augmented = _add_intercept(X)
+    actual = _add_intercept(X)
 
-    assert X_augmented.shape == (2, 3)
-    assert np.array_equal(X_augmented[:, 0], np.ones(2))
-    assert np.array_equal(X_augmented[:, 1:], X)
+    assert actual.shape == (2, 3)
+    assert np.array_equal(actual[:, 0], np.ones(2))
+    assert np.array_equal(actual[:, 1:], X)
+
+
+def test_one_hot_infers_classes_and_respects_true_count():
+    y = np.array([2, 0, 2, 1])
+
+    inferred = one_hot(y)
+    explicit = one_hot(y, true_count=3)
+
+    assert np.array_equal(inferred, np.eye(3, dtype=int)[y])
+    assert np.array_equal(explicit, inferred)
