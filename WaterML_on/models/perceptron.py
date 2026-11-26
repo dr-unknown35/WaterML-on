@@ -8,7 +8,7 @@ class Perceptron(BaseEstimator):
     def __init__(self,learning_rate=0.01,epochs=2000):
         self.learning_rate=learning_rate
         self.epochs=epochs
-        self.solver=PerceptronSolver()
+        self.solver=PerceptronSolver(learning_rate=self.learning_rate,epochs=self.epochs)
         self.weights=None
         self.bias=None
         
@@ -18,8 +18,8 @@ class Perceptron(BaseEstimator):
 
 
 
-    def fit(self,X,y):
-        self.bias,self.weights=self.solver.optimize(self,X,y)
+    def fit(self,X,y,batch_size=None):
+        self.bias,self.weights=self.solver.optimize(self,X,y,batch_size)
         return self
     
     
