@@ -34,9 +34,8 @@ from .base import baseSVM
 
 
 class PrimalSubGD(baseSVM):
-    def __init__(self,lr,batch_size,epochs,decay,C,solver):
+    def __init__(self,lr,epochs,decay,C,solver):
         self.lr=lr
-        self.batch_size=batch_size
         self.epochs=epochs
         self.decay=decay
         self.C=C
@@ -45,9 +44,9 @@ class PrimalSubGD(baseSVM):
         self.bias=None
         
         
-    def fit(self,X,y):
-        solver=GradientDescent(self.epochs,self.batch_size,learning_rate=self.lr,penalty='L2',alpha=1/(self.C*X.shape[0]),decay=self.decay) if self.solver is None else self.solver
-        self.bias,self.weights=solver.optimize(self,X,np.where(y>0,1,-1))
+    def fit(self,X,y,batch_size=None):
+        solver=GradientDescent(self.epochs,learning_rate=self.lr,penalty='L2',alpha=1/(self.C*X.shape[0]),decay=self.decay) if self.solver is None else self.solver
+        self.bias,self.weights=solver.optimize(self,X,np.where(y>0,1,-1),batch_size)
         return self
     
     
@@ -81,9 +80,8 @@ class MulticlassOvR(baseSVM):
     
     # for $K$ classes, train $K$ SVMs using PrimalSGD where one class gets the positive label and the rest get the negative one. 
     
-    def __init__(self, lr, batch_size, epochs, decay, C, solver):
+    def __init__(self, lr, epochs, decay, C, solver):
         self.lr=lr
-        self.batch_size=batch_size
         self.epochs=epochs
         self.decay=decay
         self.C=C
@@ -91,13 +89,13 @@ class MulticlassOvR(baseSVM):
         self.machines=None
         self.classes=None
     
-    def fit(self,X,y):
+    def fit(self,X,y,batch_size=None):
         self.machines=[]
         self.classes=np.unique(y)
         for c in self.classes:
             y_c=np.where(y==c ,1,-1)
-            machine=PrimalSubGD(self.lr,self.batch_size,self.epochs,self.decay,self.C,self.solver)
-            self.machines.append(machine.fit(X,y_c))
+            machine=PrimalSubGD(self.lr,self.epochs,self.decay,self.C,self.solver)
+            self.machines.append(machine.fit(X,y_c,batch_size))
         return self
         
     def predict_raw(self, X):
