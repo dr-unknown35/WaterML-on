@@ -71,9 +71,15 @@ class InverseGaussian(BaseFamily):
 
 
 class Multinomial(BaseFamily):
-    def link(self,mu,base_idx):
+    def __init__(self,base_idx=-1):
+        self.base_idx=base_idx
+        
+        
+        
+    def link(self,mu):
         mu=np.clip(mu, 1e-15, 1.0 - 1e-15)
-        baseline_col=mu[:, base_idx] 
+        baseline_col=mu[:, self.base_idx] 
+        
         return np.log(mu) -np.log(baseline_col[:, np.newaxis])
 
 
@@ -82,4 +88,13 @@ class Multinomial(BaseFamily):
         return exp_eta/exp_eta.sum(axis=1,keepdims=True)
     
     def variance(self,mu):
-            return np.diag(mu)-(mu@mu.T)
+        mu=np.asarray(mu)
+        if mu.ndim==1:
+            return np.diag(mu)-np.outer(mu,mu)
+        
+        diag=np.zeros((*mu.shape,mu.shape[1]),dtype=mu.dtype)
+        # unpack and create n=mu.shape[0] (mu.shape[0],mu.shape[1]) zero matrices
+        idx=np.arange(mu.shape[1])
+        diag[:, idx, idx] = mu
+        # fill diag entries with mu for all n matrices
+        return diag-mu[:,:,None]@mu[:,None,:]
