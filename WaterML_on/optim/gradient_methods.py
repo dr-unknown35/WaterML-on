@@ -1,4 +1,4 @@
-from .base import BaseSolver
+from .base import BaseSolver,BaseLocalSolver
 from ..data_utils.preprocessor import _add_intercept
 import numpy as np
 
@@ -7,9 +7,8 @@ import numpy as np
 
 
 class GradientDescent(BaseSolver):
-    def __init__(self,epochs=1000,batch_size=None,learning_rate=0.28,penalty=None,alpha=1,l1_ratio=0,decay=0):
+    def __init__(self,epochs=1000,learning_rate=0.28,penalty=None,alpha=1,l1_ratio=0,decay=0):
         self.epochs=epochs
-        self.batch_size=batch_size 
         self.learning_rate=learning_rate
         self.penalty=penalty
         self.alpha=alpha
@@ -20,11 +19,11 @@ class GradientDescent(BaseSolver):
         
 
 
-    def optimize(self,model, X, y):
+    def optimize(self,model, X, y,batch_size=None):
         n_samples,n_features=X.shape
 
-        if self.batch_size is None:
-            self.batch_size = X.shape[0]
+        if batch_size is None:
+            batch_size = X.shape[0]
 
 
 
@@ -35,15 +34,15 @@ class GradientDescent(BaseSolver):
 
         for t in range(self.epochs):
             lr_t=self.learning_rate/(1 + self.decay*t)
-            for i in range(0,n_samples,self.batch_size):
-                X_batch=X[i:i+self.batch_size]
-                y_batch=y[i:i+self.batch_size]
+            for i in range(0,n_samples,batch_size):
+                X_batch=X[i:i+batch_size]
+                y_batch=y[i:i+batch_size]
 
 
                 bias_gradient,weights_gradient=model.get_gradient(X_batch,y_batch,self.weights,self.bias)
 
 
-                weights_gradient+=self._penalty_gradient(self.weights)
+                weights_gradient+=self._penalty_gradient(self.weights,batch_size)
                 
                 
                 self.weights-= lr_t*weights_gradient
@@ -54,7 +53,7 @@ class GradientDescent(BaseSolver):
         return [self.bias,self.weights]
 
 class NormalEquations(BaseSolver):
-    def optimize(self,model, X, y):
+    def optimize(self,model, X, y,batch_size=None):
         X_b=_add_intercept(X)
         weights=np.linalg.inv(X_b.T@X_b) @ X_b.T @ y
         return [weights[0],weights[1:]]
@@ -70,7 +69,7 @@ class NewtonsMethod(BaseSolver):
         self.bias=None
 
 
-    def optimize(self,model,X,y):
+    def optimize(self,model,X,y,batch_size=None):
         n_samples,n_features=X.shape
         self.weights=np.zeros(n_features)
         self.bias=0
@@ -94,7 +93,7 @@ class NewtonsMethod(BaseSolver):
     
 
 
-class LocalWeightedSolver(BaseSolver):
+class LocalWeightedSolver(BaseLocalSolver):
     def optimize(self,model, X_train, y_train, query_point):
         errors=np.sum((X_train-query_point)**2, axis=1)
         W = np.diag(np.exp(-errors /(2*model.tau**2)))
@@ -105,26 +104,25 @@ class LocalWeightedSolver(BaseSolver):
 
 
 class PerceptronSolver(BaseSolver):
-    def __init__(self,epochs=1000,batch_size=None,learning_rate=0.28):
+    def __init__(self,epochs=1000,learning_rate=0.28):
         self.epochs=epochs
-        self.batch_size=batch_size 
         self.learning_rate=learning_rate
         self.weights=None
         self.bias=None
     
     
-    def optimize(self,model, X, y):
+    def optimize(self,model, X, y,batch_size=None):
         n_samples,n_features=X.shape
-        if self.batch_size is None:
-            self.batch_size = X.shape[0]
+        if batch_size is None:
+            batch_size = X.shape[0]
         self.weights=np.zeros(n_features)
         self.bias=0
         for _ in range(self.epochs):
-            for i in range(0,n_samples,self.batch_size):
-                X_batch=X[i:i+self.batch_size]
-                y_batch=y[i:i+self.batch_size]
+            for i in range(0,n_samples,batch_size):
+                X_batch=X[i:i+batch_size]
+                y_batch=y[i:i+batch_size]
                 y_pred= model._step((X_batch @ self.weights) + self.bias)
                 errors= y_pred-y_batch
-                self.weights-= self.learning_rate*(1/self.batch_size)*X_batch.T@errors
-                self.bias-= self.learning_rate*(1/self.batch_size)*np.sum(errors)
+                self.weights-= self.learning_rate*(1/batch_size)*X_batch.T@errors
+                self.bias-= self.learning_rate*(1/batch_size)*np.sum(errors)
         return [self.bias,self.weights]
