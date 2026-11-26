@@ -22,5 +22,5 @@ class BaseScaler(ABC):
 
 class BaseSplitter(ABC):
     @abstractmethod
-    def self(self,X,y=None):
+    def split(self,X,y=None):
         pass
